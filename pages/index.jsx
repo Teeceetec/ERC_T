@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import Head from "next/head";
 import { ERC_CONTRACT_ADDRESS, ERC_CONTRACT_ABI } from "../constants/index";
-import Image from "next/image";
+
 import styles from "../styles/Home.module.css";
 import Web3Modal from "web3modal";
 import { Contract, utils, providers } from "ethers";
@@ -12,6 +12,7 @@ export default function Home() {
   const [totalAmount, setTotalAmount] = useState(0);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [recipientAmount, setRecipientAmount] = useState(0);
+  const [recipientBalance, setRecipientBalance] = useState("")
 
   const web3ModalRef = useRef(null);
 
@@ -21,6 +22,10 @@ export default function Home() {
 
   const recipientAmountChange = (e) => {
     setRecipientAmount(e.target.value);
+  };
+
+  const recipieentBalanceChange = (e) => {
+    setRecipientBalance(e.target.value);
   };
 
   const transferTokens = async () => {
@@ -44,37 +49,60 @@ export default function Home() {
       setLoading(true);
       await tx.wait();
       console.log("Transfer successful");
-      windows.alert("Transfer successful!!");
+      window.alert("Transfer successful!!");
       setLoading(false);
     } catch (error) {
       console.log(error);
     }
   };
 
-  const getTotalAmount = async () => {
-    try {
-      const provider = await getProviderOrSigner();
-      const contract = new Contract(
-        ERC_CONTRACT_ADDRESS,
-        ERC_CONTRACT_ABI,
-        provider,
-      );
-      const total = await contract.getTotalSupply();
-      setTotalAmount(utils.formatEther(total));
-    } catch (error) {
-      console.log(error);
-    }
-  };
+
+   const getBalance = async () => {
+
+      if(recipientBalance === "" || !recipientAddress) {
+        window.alert("Please enter a recipient address");
+      }
+        try{
+          const provider = await getProviderOrSigner(false);
+          const contract = new Contract(
+            ERC_CONTRACT_ADDRESS,
+            ERC_CONTRACT_ABI,
+            provider,);
+
+          const balance = await contract.balanceOf(recipientAddress);
+          setRecipientBalance(utils.formatEther(balance));
+        } catch (err) {
+          console.log(err);
+        }
+   }
+
+   const Amount = async () => {
+     try {
+       const provider = await getProviderOrSigner();
+       const contract = new Contract(
+         ERC_CONTRACT_ADDRESS,
+         ERC_CONTRACT_ABI,
+         provider,
+       );
+       const total = await contract.getTotalSupply();
+       setTotalAmount(utils.formatEther(total));
+     } catch (error) {
+       console.log(error);
+     }
+   };
 
   const getProviderOrSigner = async (needSigner = false) => {
     //connect to wallet
     const provider = await web3ModalRef.current.connect();
+    if(!provider){
+      throw new Error("No provider");
+    }
     const web3Provider = new providers.Web3Provider(provider);
 
     //If users is not connected to the network let them know!!
     const { chainId } = await web3Provider.getNetwork();
     if (chainId !== 11155111) {
-      windows.alert("Please connect to the Sepolia Testnet");
+      window.alert("Please connect to the Sepolia Testnet");
       throw new Error("Please connect to the Sepolia Testnet");
     }
     if (needSigner) {
@@ -125,7 +153,7 @@ export default function Home() {
       <main className={styles.main}>
         <h1 className={styles.title}>ERC20 TOKEN</h1>
         <div>
-          <h3>TOTAL AMOUNT : {totalAmount}</h3>
+          <h3>TOTAL_SUPPLY : {totalAmount}</h3>
           <label>
             Recipient Address:
             <input
@@ -142,8 +170,24 @@ export default function Home() {
               onChange={recipientAmountChange}
             />
           </label>
+
           <button onClick={transferTokens}>Transfer</button>
         </div>
+         <div>
+           <label>
+              Recipient Balance:
+              <input
+                type="text"
+                value={recipientBalance}
+                onChange={recipieentBalanceChange} />
+            </label>
+           <button onClick={getBalance}>Get Balance</button>
+         </div>
+       
+        <div>
+          <h3>AddressBalance: {recipientBalance}</h3>
+        </div>
+        
 
         <p>Connect your wallet by clicking this button</p>
         {renderButton()}
