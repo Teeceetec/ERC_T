@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import Head from "next/head";
 import { ERC_CONTRACT_ADDRESS, ERC_CONTRACT_ABI } from "../constants/index";
 
 import styles from "../styles/Home.module.css";
-import Web3Modal from "web3modal";
+//import Web3Modal from "web3modal";
 import { Contract, utils, providers } from "ethers";
 
 export default function Home() {
@@ -12,9 +12,11 @@ export default function Home() {
   const [totalAmount, setTotalAmount] = useState(0);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [recipientAmount, setRecipientAmount] = useState(0);
-  const [recipientBalance, setRecipientBalance] = useState("")
+  const [recipientBalance, setRecipientBalance] = useState("");
+  const [provider, setProvider] = useState(null);
+  const [netWork, setNetWork] = useState(null);
 
-  const web3ModalRef = useRef(null);
+  //const web3ModalRef = useRef(null);
 
   const recipientAddressChange = (e) => {
     setRecipientAddress(e.target.value);
@@ -35,101 +37,103 @@ export default function Home() {
     }
 
     try {
-      const signer = await getProviderOrSigner(true);
-      const contract = new Contract(
-        ERC_CONTRACT_ADDRESS,
-        ERC_CONTRACT_ABI,
-        signer,
-      );
-      
-      const tx = await contract.transfer(
-        recipientAddress,
-        utils.parseEther(recipientAmount),
-      );
-      setLoading(true);
-      await tx.wait();
-      console.log("Transfer successful");
-      window.alert("Transfer successful!!");
-      setLoading(false);
+      const { ethereum } = window;
+      if (ethereum) {
+        const provider = await providers.Web3Provider(ethereum);
+        const contract = new Contract(
+          ERC_CONTRACT_ADDRESS,
+          ERC_CONTRACT_ABI,
+          provider.getSigner(),
+        );
+
+        const tx = await contract.transfer(
+          recipientAddress,
+          utils.parseEther(recipientAmount),
+        );
+        setLoading(true);
+        await tx.wait();
+        console.log("Transfer successful");
+        window.alert("Transfer successful!!");
+        setLoading(false);
+      }
     } catch (error) {
       console.log(error);
     }
   };
 
+  const getBalance = async () => {
+    if (recipientBalance === "" || !recipientAddress) {
+      window.alert("Please enter a recipient address");
+    }
 
-   const getBalance = async () => {
+    try {
+      const { ethereum } = window;
 
-      if(recipientBalance === "" || !recipientAddress) {
-        window.alert("Please enter a recipient address");
+      if (ethereum) {
+        const provider = await providers.Web3Provider(ethereum);
+        const contract = new Contract(
+          ERC_CONTRACT_ADDRESS,
+          ERC_CONTRACT_ABI,
+          provider,
+        );
+
+        const balance = await contract.balanceOf(recipientAddress);
+        setRecipientBalance(utils.formatEther(balance));
       }
-        try{
-          const provider = await getProviderOrSigner(false);
-          const contract = new Contract(
-            ERC_CONTRACT_ADDRESS,
-            ERC_CONTRACT_ABI,
-            provider,);
-
-          const balance = await contract.balanceOf(recipientAddress);
-          setRecipientBalance(utils.formatEther(balance));
-        } catch (err) {
-          console.log(err);
-        }
-   }
-
-   const Amount = async () => {
-     try {
-       const provider = await getProviderOrSigner();
-       const contract = new Contract(
-         ERC_CONTRACT_ADDRESS,
-         ERC_CONTRACT_ABI,
-         provider,
-       );
-       const total = await contract.getTotalSupply();
-       setTotalAmount(utils.formatEther(total));
-     } catch (error) {
-       console.log(error);
-     }
-   };
-
-  const getProviderOrSigner = async (needSigner = false) => {
-    //connect to wallet
-    const provider = await web3ModalRef.current.connect();
-    if(!provider){
-      throw new Error("No provider");
+    } catch (err) {
+      console.log(err);
     }
-    const web3Provider = new providers.Web3Provider(provider);
+  };
 
-    //If users is not connected to the network let them know!!
-    const { chainId } = await web3Provider.getNetwork();
-    if (chainId !== 11155111) {
-      window.alert("Please connect to the Sepolia Testnet");
-      throw new Error("Please connect to the Sepolia Testnet");
+  const totalsupply = async () => {
+    try {
+      const { ethereum } = window;
+      if (ethereum) {
+        const provider = await providers.Web3Provider(ethereum);
+        const contract = new Contract(
+          ERC_CONTRACT_ADDRESS,
+          ERC_CONTRACT_ABI,
+          provider,
+        );
+
+        const total = await contract.totalSupply();
+        setTotalAmount(utils.formatEther(total));
+      }
+    } catch (err) {
+      console.log(err);
     }
-    if (needSigner) {
-      const signer = web3Provider.getSigner();
-      return signer;
-    }
-    return web3Provider;
   };
 
   const connectWallet = async () => {
     try {
-      await getProviderOrSigner();
-      setWalletConnected(true);
+      if (window.ethereum) {
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+        const provider = new providers.Web3Provider(window.ethereum);
+        setProvider(provider);
+      }
     } catch (err) {
       console.error(err);
     }
+    setWalletConnected(true);
   };
 
   useEffect(() => {
-    if (!walletConnected) {
-      web3ModalRef.current = new Web3Modal({
-        network: "sepolia",
-        providerOptions: {},
-        disableInjectedProvider: false,
-      });
-      connectWallet();
-    }
+    const initializeProvider = async () => {
+      if (window.ethereum) {
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+      }
+    };
+    initializeProvider();
+  }, []);
+
+  useEffect(() => {
+    const getNetwork = async () => {
+      if (provider) {
+        const network = await provider.getNetwork();
+        setNetWork(network.chainId);
+      }
+    };
+    getNetwork();
   }, [walletConnected]);
 
   const renderButton = () => {
@@ -173,23 +177,24 @@ export default function Home() {
 
           <button onClick={transferTokens}>Transfer</button>
         </div>
-         <div>
-           <label>
-              Recipient Balance:
-              <input
-                type="text"
-                value={recipientBalance}
-                onChange={recipieentBalanceChange} />
-            </label>
-           <button onClick={getBalance}>Get Balance</button>
-         </div>
-       
+        <div>
+          <label>
+            Recipient Balance:
+            <input
+              type="text"
+              value={recipientBalance}
+              onChange={recipieentBalanceChange}
+            />
+          </label>
+          <button onClick={getBalance}>Get Balance</button>
+        </div>
+
         <div>
           <h3>AddressBalance: {recipientBalance}</h3>
         </div>
-        
 
         <p>Connect your wallet by clicking this button</p>
+        <p> Network connected: {netWork}</p>
         {renderButton()}
       </main>
     </div>
